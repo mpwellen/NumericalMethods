@@ -1,0 +1,301 @@
+// Chebyshev.java  Chebyshev (or Tschebycheff) polynomials and quadrature
+//
+//  T0(x)=1  T1(x)=x   Tn+1(x)=2*x*Tn(x) - Tn-1(x)
+//  T2(x)=2 x^2 - 1   T3(x)=4 x^3 - 3 x  T4(x)=8 x^4 -8 x^2 + 1
+//  int -1 to 1 of f(x)dx = sum i=1,n  w[i] F(x[i])
+//  w[i]= 1/sqrt(1-x[i]^2)
+//  x[i]= roots of Tn(x)
+//
+//  n=2 x= +/- .5773502692 w=1.0
+//  n=3 x= +/- .7745966692 w= .5555555556
+//            0.0             .8888888889
+//  n=4 x= +/- .8611363116 w= .3478546451
+//         +/- .3399810436    .6521451549
+//  n=5 x= +/- .9061798459    .2369268851
+//         +/- .5384693101    .4786286705
+//            0.0             .5688888889
+//
+// conversion/scaling  int a to b of f(x)dx =
+//             (b-a)/2 int -1 to 1 of f((a+b+x*(b-a))/2)dx
+//
+// Chebyshev quadrature, integrate f(x) from -1 to 1
+//   int -1 to 1 f(x) dx = sum i=0,n-1 w[i]f(x[i])
+
+import java.awt.*;
+import java.awt.event.*;
+
+public class Chebyshev extends Frame
+{
+  int N=15; // change to max polynomial size
+  double T[][] = new double[N][N+1]; // coefficients of Tn(x)
+  double R[][] = new double[N][N]; // roots of Tn(x) the x[i]
+  double W[][] = new double[N][N]; // weights of Tn(x) the w[i]
+  double Td[][] = new double[N][N]; // derivitive
+
+  public Chebyshev()
+  {
+    System.out.println("Chebyshev.java running");
+    // generate family of Chebyshev polynomials Tn(x)
+    // as T[degree][coefficients]
+    // build coefficients of Tn(x)
+    for(int n=0; n<N; n++) for(int i=0; i<N; i++) T[n][i]=0.0;
+    T[0][0]=1.0;
+    T[1][1]=1.0; // start for recursion
+    for(int n=2; n<N; n++)
+    {
+      for(int i=0; i<=n; i++)
+      {
+        T[n][i]=T[n][i]-T[n-2][i];
+        T[n][i+1]=T[n][i+1]+2.0*T[n-1][i];
+        System.out.println("T["+n+"]["+i+"]="+T[n][i]);
+      }
+      System.out.println();
+    }
+
+    // find roots of Tn(x), the x[i]
+    for(int n=0; n<N; n++) for(int i=0; i<N; i++) R[n][i]=0.0;
+    R[1][0]=1.0;
+    for(int n=2; n<N; n++)
+    {
+      LRoot(n, T, R);
+      for(int i=0; i<n; i++)
+      {
+        System.out.println("R["+n+"]["+i+"]="+R[n][i]);
+      }
+      System.out.println();
+    }
+
+    // compute weights of Tn(x)
+    double sumw=0.0;
+    for(int n=0; n<N; n++) for(int i=0; i<N; i++) W[n][i]=0.0;
+    W[1][0]=1.0;
+    for(int n=2; n<N; n++)
+    {
+      sumw = 0.0;
+      for(int i=0; i<n; i++)
+      {
+        W[n][i]=1.0/StrictMath.sqrt(1.0-R[n][i]*R[n][i]);
+        sumw = sumw + W[n][i];
+        System.out.println("W["+n+"]["+i+"]="+W[n][i]);
+      }
+      System.out.println("                            sum W="+sumw);
+    }
+    System.out.println();
+
+    // integrate e^x from a to b
+    double a=1.0;
+    double b=3.0;
+    double exact=StrictMath.exp(b)-StrictMath.exp(a);
+    double approx=0.0;
+    double err=0.0;
+// conversion/scaling  int a to b of f(x)dx =
+//             (b-a)/2 int -1 to 1 of f((a+b+x*(b-a))/2)dx
+//
+// Chebyshev quadrature, integrate f(x) from -1 to 1
+//   int -1 to 1 f(x) dx = sum i=0,n-1 w[i]f(x[i])
+    System.out.println("Chebyshev quadrature of e^x from "+a+
+                       " to "+b+" = "+exact);
+    for(int n=2; n<N; n++)
+    {
+      approx=0.0;
+      for(int i=0; i<n; i++)
+      {
+        approx = approx + W[n][i]*StrictMath.exp((a+b+R[n][i]*(b-a))/2.0);
+      }
+      approx = approx*(b-a)/2.0;
+      err = exact-approx;
+      System.out.println("n="+n+" approx="+approx+"  err="+err);
+    }
+
+    System.out.println();
+    PlotPoly();
+  }
+  
+  private static void LRoot(int n, double P[][], double R[][])
+  {
+    // specialized for roots of Chebyshev polynomials
+    // check first for zero root, reduce into T.
+    // T=initial polynomial, store root at R[n][i]
+    double T[] = new double[n+1];
+    double DT[] = new double[n];
+    int i=0;
+
+    if(P[n][0]==0.0)
+    { 
+      R[n][i]=0.0;
+      i++;
+      for(int j=1; j<=n; j++) T[j-1] = P[n][j]; // reduce
+    }
+    else
+    {
+      for(int j=0; j<=n; j++) T[j] = P[n][j];
+    }
+    while(i<n)
+    {
+      for(int j=0; j<n-i; j++)
+      {
+        DT[j]=(double)(j+1)*T[j+1];
+      }
+      // do root Newton
+      double rold=0.0, r=1.0;
+      //System.out.println("r="+r+", y="+evaluate(n-i, T, r)+
+      //                   ", dy="+evaluate(n-i-1, DT, r));
+
+      for(int k=0; k<20; k++)
+      {
+        r = r - evaluate(n-i, T, r)/evaluate(n-i-1, DT, r);
+        if(Math.abs(r-rold)<1.0E-14) break;
+        rold = r;
+      }
+      for(int j=n-i; j>0; j--)
+      {
+        T[j-1]=T[j-1]+r*T[j];
+      }
+      for(int j=1; j<=n-i; j++) T[j-1] = T[j]; // reduce
+      R[n][i] = r;
+      i++;
+      r = -r;
+      for(int j=n-i; j>0; j--)
+      {
+        T[j-1]=T[j-1]+r*T[j];
+      }
+      for(int j=1; j<=n-i; j++) T[j-1] = T[j]; // reduce
+      R[n][i] = r;
+      i++;
+    }
+  }
+  
+  
+  private void PlotPoly()
+  {
+    setTitle("Chebyshev polynomials");
+    setSize(600,400);
+    setBackground(Color.white);
+    setForeground(Color.black);
+    addWindowListener(new WindowAdapter()
+    {
+      public void windowClosing(WindowEvent e)
+      {
+        System.exit(0);
+      }
+    });
+    setVisible(true);
+  }
+
+  public void paint(Graphics g)
+  {
+    final int sca=100;
+    final int hw=2*sca;
+    final int f1xOff=50;
+    final int f1yOff=70;
+    final int f1xC=f1xOff+hw/2;
+    final int f1yC=f1yOff+hw/2;
+
+    final int f2xOff=350;
+    final int f2yOff=70;
+    final int f2xC=f2xOff+hw/2;
+    final int f2yC=f2yOff+hw/2;
+    
+    g.drawRect(f1xOff, f1yOff, hw, hw);
+    g.drawLine(f1xOff-5, f1yC,      f1xOff+hw+5, f1yC);
+    g.drawLine(f1xC,   f1yOff-5,    f1xC, f1yOff+hw+5);
+    g.drawString("1",  f1xOff-14,   f1yOff+4);
+    g.drawString("0",  f1xOff-14,   f1yC+4);
+    g.drawString("-1", f1xOff-14,   f1yOff+hw+4);
+    g.drawString("-1", f1xOff-4,    f1yOff+hw+15);
+    g.drawString("0",  f1xC-4,      f1yOff+hw+15);
+    g.drawString("1",  f1xOff+hw-4, f1yOff+hw+15);
+    g.drawString("y",  f1xC-4,      f1yOff-12);
+    g.drawString("x",  f1xOff+hw+6, f1yC+4);
+    
+    g.drawRect(f2xOff, f2yOff, hw, hw);
+    g.drawLine(f2xOff-5, f2yC,      f2xOff+hw+5, f2yC);
+    g.drawLine(f2xC,   f2yOff-5,    f2xC, f2yOff+hw+5);
+    g.drawString("5",  f2xOff-14,   f2yOff+4);
+    g.drawString("0",  f2xOff-14,   f2yC+4);
+    g.drawString("-5", f2xOff-14,   f2yOff+hw+4);
+    g.drawString("-1", f2xOff-4,    f2yOff+hw+15);
+    g.drawString("0",  f2xC-4,      f2yOff+hw+15);
+    g.drawString("1",  f2xOff+hw-4, f2yOff+hw+15);
+    g.drawString("y",  f2xC-4,      f2yOff-12);
+    g.drawString("x",  f2xOff+hw+6, f2yC+4);
+
+    double xnew, ynew, xold=0.0, yold=0.0;
+    Color col[]={Color.yellow, Color.green, Color.red, Color.blue,
+                 Color.black, Color.pink, Color.orange};
+    double y;
+    for(int n=2; n<Math.min(N,6); n++) // up to 6
+    {
+      g.setColor(col[n-2]);
+      for(double x=-1.0; x<=1.0; x=x+1.0/40.0)
+      {
+        xnew=x;
+        ynew=evaluate(n, T[n], x);
+        if(x!=-1.0) // not first time
+        {
+          g.drawLine((int)(f1xC+(xold/1.0)*sca), (int)(f1yC-(yold/1.0)*sca),
+                     (int)(f1xC+(xnew/1.0)*sca), (int)(f1yC-(ynew/1.0)*sca));
+        }
+        xold=xnew;
+        yold=ynew;
+      }
+    }
+    for(int n=2; n<Math.min(N,6); n++) // up to 6
+    {
+      for(int j=0; j<n; j++) Td[n][j] = (double)(j+1)*T[n][j+1];
+      g.setColor(col[n-2]);
+      for(double x=-1.0; x<=1.0; x=x+1.0/40.0)
+      {
+        xnew=x;
+        ynew=evaluate(n-1, Td[n], x);
+        if(ynew>4.95) ynew=4.95;
+        if(ynew<-4.95) ynew=-4.95;
+        if(x!=-1.0) // not first time
+        {
+          g.drawLine((int)(f2xC+(xold/1.0)*sca), (int)(f2yC-(yold/5.0)*sca),
+                     (int)(f2xC+(xnew/1.0)*sca), (int)(f2yC-(ynew/5.0)*sca));
+        }
+        xold=xnew;
+        yold=ynew;
+      }
+    }
+
+    g.setColor(Color.red);
+    Font cur16 = new Font("courier", Font.BOLD, 16); 
+    g.setFont(cur16);
+    g.drawString("y=Tn(x)", 55, 50);
+    g.drawString("y=T'n(x)", 355, 50);
+    g.setColor(col[0]);
+    g.drawString("T2(x) ____", 55, 310);
+    g.setColor(col[1]);
+    g.drawString("T3(x) ____", 55, 330);
+    g.setColor(col[2]);
+    g.drawString("T4(x) ____", 55, 350);
+    g.setColor(col[3]);
+    g.drawString("T5(x) ____", 55, 370);
+    g.setColor(col[0]);
+    g.drawString("T'2(x) ____", 355, 310);
+    g.setColor(col[1]);
+    g.drawString("T'3(x) ____", 355, 330);
+    g.setColor(col[2]);
+    g.drawString("T'4(x) ____", 355, 350);
+    g.setColor(col[3]);
+    g.drawString("T'5(x) ____", 355, 370);
+    g.setColor(Color.black);
+    g.drawString("Chebyshev Polynomials and derivatives", 100, 390);
+
+  }
+  
+  
+  private static double evaluate(int n, double T[], double x)
+  {
+    double value=T[n];
+    for(int i=n-1; i>=0; i--) value = value*x+T[i];
+    return value;
+  }
+  
+  public static void main (String[] args) // demo
+  {
+    new Chebyshev(); // construct and execute
+  }
+}
